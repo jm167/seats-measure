@@ -57,109 +57,6 @@ const smoothPolygon = (
   return current;
 };
 
-const fitEllipseFromPoints = (
-  points: NormalizedPoint[],
-  sampleCount: number = 72,
-): NormalizedPoint[] => {
-  if (points.length < 3) {
-    return points;
-  }
-
-  const n = points.length;
-
-  // Centroid
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0; i < n; i++) {
-    cx += points[i].x;
-    cy += points[i].y;
-  }
-  cx /= n;
-  cy /= n;
-
-  // Covariance matrix around centroid
-  let sxx = 0;
-  let syy = 0;
-  let sxy = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = points[i].x - cx;
-    const dy = points[i].y - cy;
-    sxx += dx * dx;
-    syy += dy * dy;
-    sxy += dx * dy;
-  }
-  sxx /= n;
-  syy /= n;
-  sxy /= n;
-
-  // Eigen decomposition of 2x2 covariance to get principal directions
-  const trace = sxx + syy;
-  const det = sxx * syy - sxy * sxy;
-  const disc = Math.max(0, trace * trace * 0.25 - det);
-  const root = Math.sqrt(disc);
-  const lambda1 = trace * 0.5 + root;
-  const lambda2 = trace * 0.5 - root;
-
-  let v1x: number;
-  let v1y: number;
-  if (Math.abs(sxy) > 1e-6) {
-    v1x = lambda1 - syy;
-    v1y = sxy;
-  } else if (sxx >= syy) {
-    v1x = 1;
-    v1y = 0;
-  } else {
-    v1x = 0;
-    v1y = 1;
-  }
-  const v1Len = Math.hypot(v1x, v1y) || 1;
-  v1x /= v1Len;
-  v1y /= v1Len;
-
-  // Second axis is orthogonal
-  const v2x = -v1y;
-  const v2y = v1x;
-
-  // Project points onto axes to estimate radii
-  let maxProj1 = 0;
-  let maxProj2 = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = points[i].x - cx;
-    const dy = points[i].y - cy;
-    const proj1 = Math.abs(dx * v1x + dy * v1y);
-    const proj2 = Math.abs(dx * v2x + dy * v2y);
-    if (proj1 > maxProj1) maxProj1 = proj1;
-    if (proj2 > maxProj2) maxProj2 = proj2;
-  }
-
-  if (maxProj1 <= 0 || maxProj2 <= 0) {
-    return points;
-  }
-
-  const a = maxProj1;
-  const b = maxProj2;
-
-  const result: NormalizedPoint[] = [];
-  for (let i = 0; i < sampleCount; i++) {
-    const t = (2 * Math.PI * i) / sampleCount;
-    const cosT = Math.cos(t);
-    const sinT = Math.sin(t);
-
-    const localX = a * cosT;
-    const localY = b * sinT;
-
-    const worldX = cx + localX * v1x + localY * v2x;
-    const worldY = cy + localX * v1y + localY * v2y;
-
-    result.push({
-      x: Math.max(0, Math.min(1, worldX)),
-      y: Math.max(0, Math.min(1, worldY)),
-    });
-  }
-
-  return result;
-};
-
 export const CapturePanelScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const [permission, requestPermission] = useCameraPermissions();
@@ -216,7 +113,7 @@ export const CapturePanelScreen: React.FC = () => {
       y: p.y / size.height,
     }));
 
-    const refinedPoints = fitEllipseFromPoints(smoothPolygon(normalizedPoints));
+    const refinedPoints = smoothPolygon(normalizedPoints);
 
     navigation.navigate('ReviewPanel', {
       imageUri: capturedUri,
